@@ -3,7 +3,7 @@ name: devsecops tools
 on:
   push:
     branches:
-      - develop
+      - master
 
 jobs:
   gitleaks:
