@@ -1,0 +1,182 @@
+name: devsecops tools
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: gitleaks-action
+        uses: zricethezav/gitleaks-action@master
+        #continue-on-error: true 
+
+  horusec-security:
+    name: horusec-security
+    runs-on: ubuntu-latest
+    needs: gitleaks
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Running Horusec Security Download latest version
+        #continue-on-error: true
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest
+          horusec start -p="./" --config-file-path horusec-config.json    
+
+      - name: Upload  security scan result as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: horusec
+          path: horusec-config.json  
+
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} 
+        with:
+          projectBaseDir: . 
+          args: >
+            -Dsonar.projectKey=${{ github.event.repository.name}}
+            -Dsonar.projectName=${{ github.event.repository.name}}  
+            -Dsonar.source=. 
+            -Dsonar.sourceEncoding=UTF-8
+    
+      - name: SonarQube Quality Gate check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        # Force to fail step after specific time
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   
+
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build an image from Dockerfile
+        run: |
+          docker build -t trivy-image:${{ github.sha }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'trivy-image:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  anchore:
+    name: Anchore
+    runs-on: ubuntu-latest
+    needs: trivy
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Docker Build
+        run: |
+          docker build -t anchore-image:${{ github.sha }} . 
+      - name: Anchore
+        uses: anchore/scan-action@v3
+        continue-on-error: true 
+        id: scan
+        with:
+          image: anchore-image:${{ github.sha }}
+          fail-build: false
+          severity-cutoff: high # one of: negligible, low, medium, high, critical
+          acs-report-enable: true
+      - name: Upload SARIF file
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+
+  snyk-code:
+    name: Snyk Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: >
+            --severity-threshold=high
+            --all-projects
+            --sarif-file-output=snyk-code.sarif
+      - name: Upload SARIF file
+        #if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk-code.sarif  
+
+  snyk-container:
+    name: Snyk Container
+    runs-on: ubuntu-latest
+    needs: snyk-code
+    steps:
+      ## Checkout is required since Snyk needs the Dockerfile for the Sarif report
+      - name: Checkout repository
+        uses: actions/checkout@master
+      - name: Docker Build
+        run: |
+          docker build -t image-snyk:${{ github.sha }} . 
+      - name: Snyk
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: image-snyk:${{ github.sha }}
+          args: >
+            --file=Dockerfile
+            --severity-threshold=high
+      - name: Upload SARIF file
+        #if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+
+  checkov:
+    name: Checkov
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@master
+        continue-on-error: true 
+        with:
+          directory: .
+          framework: all
+          quiet: true
+          soft_fail: true
+          download_external_modules: true
+          log_level: INFO # One of: INFO, WARNING, DEBUG
+          output_format: sarif
+      - name: Upload Sarif file
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: results.sarif          

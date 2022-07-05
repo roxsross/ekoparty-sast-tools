@@ -3,9 +3,7 @@ name: sast-synk
 on:
   push:
     branches:
-      - master
-  pull_request:
-      branches: [ master]
+      - develop
 
 jobs: 
   snyk-code:
