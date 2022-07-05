@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@master
       - name: Docker Build
         run: |
-          docker build -t image-snyk:${{ github.sha }} . .
+          docker build -t image-snyk:${{ github.sha }} . 
       - name: Snyk
         uses: snyk/actions/docker@master
         continue-on-error: true
