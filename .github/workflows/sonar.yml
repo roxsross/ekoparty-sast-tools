@@ -17,4 +17,18 @@ jobs:
         uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}     
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} 
+        with:
+          projectBaseDir: . 
+          arg: >
+            -Dsonar.projectKey=${{ github.event.repository.name}}
+            -Dsonar.projectName=${{ github.event.repository.name}}  
+            -Dsonar.source=. 
+            -Dsonar.sourceEncoding=UTF-8
+    
+    - name: SonarQube Quality Gate check
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      # Force to fail step after specific time
+      timeout-minutes: 5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}                
