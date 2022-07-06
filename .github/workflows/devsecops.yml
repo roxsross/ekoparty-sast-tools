@@ -65,7 +65,7 @@ jobs:
   snyk-code:
     name: Snyk Code
     runs-on: ubuntu-latest
-    needs: sonar
+    needs: [gitleaks,horusec-security]
     steps:
       - uses: actions/checkout@master
       - name: Run Snyk to check for vulnerabilities
@@ -87,7 +87,7 @@ jobs:
   checkov:
     name: Checkov
     runs-on: ubuntu-latest
-    needs: snyk-code
+    needs: [gitleaks,horusec-security]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -135,7 +135,7 @@ jobs:
   anchore:
     name: Anchore
     runs-on: ubuntu-latest
-    needs: trivy
+    needs: checkov
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -160,7 +160,7 @@ jobs:
   snyk-container:
     name: Snyk Container
     runs-on: ubuntu-latest
-    needs: trivy
+    needs: checkov
     steps:
       ## Checkout is required since Snyk needs the Dockerfile for the Sarif report
       - name: Checkout repository
