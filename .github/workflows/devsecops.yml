@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  gitleaks:
+  security_secret:
     name: Gitleaks
     runs-on: ubuntu-latest
     steps:
@@ -16,14 +16,7 @@ jobs:
       - name: gitleaks-action
         uses: zricethezav/gitleaks-action@master
         #continue-on-error: true 
-
-  horusec-security:
-    name: horusec-security
-    runs-on: ubuntu-latest
-    needs: gitleaks
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+        
       - name: Running Horusec Security Download latest version
         #continue-on-error: true
         run: |
@@ -38,7 +31,7 @@ jobs:
 
   sonar:
     runs-on: ubuntu-latest
-    needs: [gitleaks,horusec-security]
+    needs: [security_secret]
     steps:
       - uses: actions/checkout@v3
 
@@ -65,7 +58,7 @@ jobs:
   snyk-code:
     name: Snyk Code
     runs-on: ubuntu-latest
-    needs: [gitleaks,horusec-security]
+    needs: [security_secret]
     steps:
       - uses: actions/checkout@master
       - name: Run Snyk to check for vulnerabilities
@@ -87,7 +80,7 @@ jobs:
   checkov:
     name: Checkov
     runs-on: ubuntu-latest
-    needs: [gitleaks,horusec-security]
+    needs: [security_secret,sonar,snyk-code]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
